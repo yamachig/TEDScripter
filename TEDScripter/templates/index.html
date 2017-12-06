@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>TEDScripter</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<script src="https://code.jquery.com/jquery-3.1.1.min.js"></script>
+<script src="https://cdn.jsdelivr.net/underscorejs/1.8.3/underscore-min.js"></script>
+<script src="https://cdn.jsdelivr.net/backbonejs/1.3.3/backbone-min.js"></script>
+
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
+
+<script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-46954277-2', 'auto');
+  ga('send', 'pageview');
+
+</script>
+</head>
+
+<body>
+
+<div class="container-fluid">
+
+<div class="page-header">
+<h1>TEDScripter <small>TED transcript translation viewer</small></h1>
+</div>
+
+<div id="talk_select_view"></div>
+<div id="talk_view"></div>
+
+<footer style="border-top: 1px solid #eee">
+    <p style="text-align: right;">
+        Source code: <a href="https://github.com/yamachig/TEDScripter" target="_blank">https://github.com/yamachig/TEDScripter</a>
+    </p>
+</footer>
+
+</div>
+</body>
+
+
+
+<script id="talk_select_view_template" type="text/template">
+<form class="form-inline">
+<p>
+<input type="text" class="form-control" style="min-width: 30%" placeholder="トークID"/>
+<input type="submit" class="btn btn-default"/>
+</p>
+</form>
+</script>
+
+<style>
+#talk_view table td {
+    vertical-align: top;
+}
+#talk_view .audio-block {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 100;
+    background-color: white;
+    padding-top: 5px;
+}
+.fragment.hover {
+    background-color: rgb(230, 228, 228);
+}
+.fragment.current {
+    background-color: rgb(255, 251, 193);
+    text-decoration: underline;
+}
+</style>
+<script id="talk_view_template" type="text/template">
+<% if(loading){ %>
+<p>
+Loading...
+</p>
+<% } else { %>
+
+<% if(fail){ %>
+<p>
+Loading failed. Check talk ID.
+</p>
+<% } %>
+
+<% if(_.isNull(talk)){ %>
+<p>
+Input talk ID (or talk URL) and submit
+</p>
+<% } else { %>
+
+<%
+var sc_en = talk.script.en;
+var sc_ja = talk.script.ja;
+var paragraphs = null;
+if(sc_en.length == sc_ja.length) {
+    paragraphs = _.map(_.zip(sc_en, sc_ja), function(p) {
+        return {en: p[0], ja: p[1]};
+    });;
+} else {
+    paragraphs = [{en: sc_en, ja: sc_ja}];
+}
+%>
+<div class="row">
+    <div class="col-sm-12">
+        <div class="audio-block">
+            <div class="container-fluid">
+                <div class="row">
+                    <div class="col-sm-11">
+                        <audio src="<%= talk.audio_url %>" controls loop preload="metadata" style="width: 100%;">
+                    </div>
+                    <div class="col-sm-1">
+                        <input id="scroll_checkbox" type="checkbox" checked>
+                        <label for="scroll_checkbox">scroll</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="row">
+    <div class="col-sm-6" style="text-align: center;"><strong>English</strong></div>
+    <div class="col-sm-6" style="text-align: center;"><strong>Japanese</strong></div>
+</div>
+
+<div class="row">
+    <div class="col-sm-6" style="text-align: justify;">
+        <p><%= talk.title.en %></p>
+    </div>
+    <div class="col-sm-6" style="text-align: justify;">
+        <p><%= talk.title.ja %></p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-sm-6" style="text-align: justify;">
+        <p><%= talk.description.en %></p>
+    </div>
+    <div class="col-sm-6" style="text-align: justify;">
+        <p><%= talk.description.ja %></p>
+    </div>
+</div>
+
+<% _.each(paragraphs, function(p) { %>
+<div class="row">
+    <% _.each(["en", "ja"], function(lang) { %>
+        <div class="col-sm-6" style="text-align: justify;">
+            <p>
+            <% var paragraph = p[lang]; %>
+            <% _.each(paragraph, function(fragment) { %>
+                <% var time = fragment[0] %>
+                <% var text = fragment[1] %>
+                <span class="fragment" data-time="<%= time %>">
+                    <%= text %>
+                </span>
+            <% }); %>
+            </p>
+        </div>
+    <% }); %>
+</div>
+<% }); %>
+
+<% } %>
+<% } %>
+</script>
+<script>
+var State = Backbone.Model.extend({
+    defaults: {
+    },
+});
+var state = new State();
+
+var TalkSelectView = Backbone.View.extend({
+    el: "#talk_select_view",
+    template: _.template($("#talk_select_view_template").text()),
+
+    events: {
+        "submit form": "form_submit"
+    },
+
+    initialize: function(options) {
+        var self = this;
+        self.talk_id = null;
+
+        self.listenTo(state, "change:talk_id", self.talk_id_change);
+    },
+
+    render: function() {
+        var self = this;
+        self.$el.html(self.template({
+        }));
+    },
+
+    form_submit: function() {
+        var self = this;
+        var talk_id = null;
+
+        var text = self.$('input[type=text]').val();
+        var parts = text.split('/');
+        var talks_index = _.indexOf(parts, 'talks');
+        if(talks_index >= 0) {
+            talk_id = parts[talks_index + 1];
+        } else {
+            talk_id = text;
+        }
+
+        router.navigate(talk_id, {trigger: true});
+
+        return false;
+    },
+
+    talk_id_change: function() {
+        var self = this;
+        var talk_id = state.get('talk_id');
+        self.$('input[type=text]').val(talk_id)
+    }
+});
+var talk_select_view = new TalkSelectView();
+talk_select_view.render();
+
+var TalkView = Backbone.View.extend({
+    el: "#talk_view",
+    template: _.template($("#talk_view_template").text()),
+
+    events: {
+        "mouseenter .fragment": "fragment_mouseenter",
+        "mouseleave .fragment": "fragment_mouseleave",
+    },
+
+    initialize: function(options) {
+        var self = this;
+        self.talk_id = null;
+        self.previous_pos = 0;
+
+        self.listenTo(state, "change:talk_id", self.talk_id_change);
+    },
+
+    talk_id_change: function() {
+        var self = this;
+        var talk_id = state.get('talk_id');
+        console.log("TalkView.talk_id_change: ", talk_id);
+
+        self.talk = null;
+        self.times = [];
+        self.fail = false;
+
+        if(_.isNull(talk_id)) {
+            self.talk = null;
+            self.times = [];
+            self.render();
+        } else {
+            self.loading = true;
+
+            $.get("talk_data/" + talk_id)
+            .done(function(talk){
+                self.talk = talk;
+                self.times = talk.times['en'];
+                self.loading = false;
+                self.render();
+            })
+            .fail(function(talk){
+                self.fail = true;
+                self.loading = false;
+                self.render();
+            });
+
+            self.render();
+        }
+    },
+
+    render: function() {
+        var self = this;
+        self.$el.html(self.template({
+            loading: self.loading,
+            talk: self.talk,
+            fail: self.fail
+        }));
+
+        if(self.$("audio")[0]){
+            self.$("audio")[0].addEventListener("timeupdate", function(){
+                self.audio_timeupdate();
+            });
+        }
+    },
+
+    fragment_mouseenter: function(e) {
+        var self = this;
+        var fragment = $(e.target);
+        var time = fragment.data("time");
+        self.$('.fragment[data-time="' + time + '"]').addClass("hover");
+    },
+
+    fragment_mouseleave: function(e) {
+        var self = this;
+        var fragment = $(e.target);
+        var time = fragment.data("time");
+        self.$('.fragment[data-time="' + time + '"]').removeClass("hover");
+    },
+
+    audio_timeupdate: function() {
+        var self = this;
+        var audio_el = self.$("audio")[0];
+        var time = audio_el.currentTime * 1000;
+        var time_value = null;
+        for(var i = 0; i < self.times.length - 1; i++) {
+            var t0 = self.times[i];
+            var t1 = self.times[i+1];
+            if(t0 <= time && time < t1) {
+                time_value = t0;
+                break;
+            }
+        }
+        if(_.isNull(time_value)) {
+            time_value = _.last(self.times);
+        }
+        self.$('.fragment').removeClass("current");
+        self.$('.fragment[data-time="' + time_value + '"]').addClass("current");
+
+        if($("#scroll_checkbox").val()) {
+            var pos = Infinity;
+            self.$('.fragment[data-time="' + time_value + '"]').each(function(i, el){
+                var obj = $(el);
+                var top = obj.offset().top;
+                if(top < pos) {
+                    pos = top;
+                }
+            });
+            pos = Math.floor(pos) - 30;
+            if(self.previous_pos != pos) {
+                console.log(self.previous_pos, pos);
+                self.previous_pos = pos;
+                $("html,body").stop();
+                $("html,body").animate({
+                    scrollTop: pos,
+                },"slow", "swing");
+            }
+        }
+    },
+});
+var talk_view = new TalkView();
+
+var Router = Backbone.Router.extend({
+
+    routes: {
+        ":talk_id": "talk",
+        "": "index",
+    },
+
+    talk: function(talk_id) {
+        state.set({talk_id: talk_id});
+    },
+
+    index: function() {
+        state.set({talk_id: null});
+    }
+
+});
+var router = new Router();
+$(function(){
+    Backbone.history.start();
+})
+</script>
+</html>

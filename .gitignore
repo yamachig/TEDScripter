@@ -1,0 +1,10 @@
+*~
+*.pyc
+*.cache
+*.DS_Store
+venv
+*.pyc
+staticfiles
+.env
+db.sqlite3
+debug.log
